@@ -1,0 +1,414 @@
+---
+title: "Breast Cancer Survival Analysis"
+author: "Yash Mehta"
+output: html_document
+---
+### Abstract
+
+Through this study on the breast cancer dataset from National Cancer Institute which records a patients' history from 1973 to 2014 and have more than 125 attributes. Many of the attributes are categorical variables and hence require a different treatment compared to continuous variable data set. In this research, I have used the application of Multiple correspondence analysis and Hierarchical Clustering to identify the various factors that may affect the survival of a breast cancer patient. To further strengthen the results and compare the results obtained from clustering, I applied the Cox proportional Hazard method to perform survival analysis. The results the various methods were then compared to reach the conclusion.
+
+
+### Introduction
+
+Breast cancer is the most common malignant disease for females and the second most common type of cancer after lung cancer for both sexes. It primarily affects women older than 50 years. Even though the absolute incidence in women aged 20 - 40 years is low, breast cancer constitutes about 24 percent of new cancers in this age group. Hence treatment of breast cancer, including surgery, drugs (hormone therapy and chemotherapy) and radiation, is a main interest of the public health sector. In USA and Canada, breast cancer accounts for 29% of all cancer diagnoses for women. One in 9 women is expected to develop breast cancer during her lifetime and one in 33 is expected to die of breast cancer. 
+
+It is hence important to understand several factors that contribute to the survival of a breast cancer patient. A survival rate is a statistical index that summarizes the probable frequency of specific outcomes for a group of patients at a point in time. A survival curve is a summary display of the pattern of survival rates over time. The basic concept is simple. For example, for a certain category of patient, one might ask what proportion is likely to be alive at the end of a specified interval, such as 5 years. The greater the proportion surviving, the lower the risk for this category of patients. Survival analysis, however, is somewhat more complicated than it first might appear. If one were to measure the length of time between diagnosis and death or record the vital status when last observed for every patient in a selected patient group, one might be tempted to describe the survival of the group as the proportion alive at the end of the period under investigation. This simple measure is informative only if all the patients were observed for the same length of time.
+
+The MCA is a dimension reduction technique like factor analysis, but extends factor analysis in two counts; handling of categorical variable, particularly measured in nominal scale and developing perceptual maps of extracted components. It helps us in identifying the crucial factors that contribute to data variability and hence will be used here to recognize the important attributes. 
+
+This study is further extended to ATTRIBUTE CLUSTERING where different attributes are factored together to identify the number of clusters that can be formed for the given data set and check inter variable dependency.
+
+The COX PROPORTIONAL HAZARD METHOD further strengthens the study of various data attributes and is and provides important insights for survival analysis. It identifies the crucial factors and provide a fit curve to predict the survival of future cancer cases. It can help in predicting the survival probability of patient and identify the factors that are classified as hazard.
+
+KAPLAN-MEIER METHOD has also been employed. Since the individual patient data is available, these same data can be analyzed using the Kaplan-Meier method. It calculates the proportion surviving to each point that a death occurs, rather than at fixed intervals. The principal difference evident in a survival curve is that the stepwise changes in the cumulative survival rate appear to occur independently of the intervals on the "Years Following Diagnosis" axis. This method provides a more accurate estimate of the survival curve.
+
+
+### Data Used for Analysis
+
+
+The data set used for this study is fron National Cancer Institute's  Surveillance, Epidemiology, and End Results Program. It records the data of breast cancer patients from around the country of USA from 1973 to 2014. SEER collects and publishes cancer incidence and survival data from population-based cancer registries covering approximately 28% of the population of the United States. SEER coverage includes 26% of African Americans, 41% of Hispanics, 43% of American Indians and Alaska Natives, 54% of Asians, and 71% of Hawaiian/Pacific Islanders. The SEER Program registries routinely collect data on patient demographics, primary tumor site, tumor morphology and stage at diagnosis, first course of treatment, and follow-up for vital status.
+
+The data used is large and hence we used the batch processing techniques to read the data in R studio and used following R- packages
+```{r lib, include=FALSE}
+library("ff") ## To read the data through batch processing
+require(rJava) ## Reading xls files
+require(xlsx)
+require(ggplot2) ## Used for plots and
+require(FactoMineR) ## for MCA
+require(ClustOfVar) ## For Clustering
+library(survival)  ## For Cox Proportional hazard method
+```
+
+```{r readData,include=FALSE}
+
+## reading the data
+x<- read.csv.ffdf(file="BREAST_cancer_Data_Set_New.csv", header=TRUE, VERBOSE=TRUE, colClasses=NA)
+x<- data.frame(x)
+
+```
+
+We have a large dataset with more than 100 columns. However, it is important to analyze only the columns (or attributes) that affect the breast cancer patient and can further help in survival analysis. Different columns were manually inspected and a few attributes were shortlisted for initial analysis. The following columns were then shortlisted for end to end analysis:
+
+Sex, Marital.Status, Race.Ethnicity, Primary.Site, Laterality,Histology, Behavior.Code,Grade, HER2.Recode, ER.Status, PR.Status, Breast.Subtype, Vital.Status.recode, Age.at.diagnosis, Survival.months, Total.Number.of.Benign.Tumors, Total.Number.of.In.Situ.malignant.Tumors.
+
+```{r subset,include=FALSE}
+#####Subseting data for Clustering and MCA
+RegionData<- function(y,ID)
+{
+newdata <- subset(y, Registry.ID== ID &
+                     Survival.months<9999 &
+                     Race.Ethnicity!="99" & 
+                     Total.Number.of.Benign.Borderline.Tumors.for.Patient!=99 &
+                     Total.Number.of.In.Situ.malignant.Tumors.for.Patient!=99, 
+                     select=c(Sex,
+                           Marital.Status.at.DX,
+                           Race.Ethnicity,
+                           Primary.Site,
+                           Laterality,
+                           Histology..92.00..ICD.O.2,
+                           Behavior.Code.ICD.O.3,
+                           Grade,
+                           Derived.HER2.Recode..2010..,
+                           ER.Status.Recode.Breast.Cancer..1990..,
+                           PR.Status.Recode.Breast.Cancer..1990..,
+                           Breast.Adjusted.AJCC.6th.Stage..1988..,
+                           Breast.Subtype..2010..,
+                           Vital.Status.recode,
+                           Age.at.diagnosis,
+                           Survival.months,
+                           Total.Number.of.Benign.Borderline.Tumors.for.Patient,
+                           Total.Number.of.In.Situ.malignant.Tumors.for.Patient
+                           ))
+
+newdata<- na.omit(newdata)
+newdata$Sex<-as.factor(newdata$Sex)
+newdata$Marital.Status.at.DX<- as.factor(as.character(newdata$Marital.Status.at.DX))
+newdata$Race.Ethnicity<- as.factor(as.character(newdata$Race.Ethnicity))
+newdata$Primary.Site<- as.factor(as.character(newdata$Primary.Site))
+newdata$Laterality<- as.factor(as.character(newdata$Laterality))
+newdata$Histology..92.00..ICD.O.2<- as.factor(as.character(newdata$Histology..92.00..ICD.O.2))
+newdata$Breast.Adjusted.AJCC.6th.Stage..1988..<- as.factor(as.character(newdata$Breast.Adjusted.AJCC.6th.Stage..1988..))
+newdata$Vital.Status.recode<- as.factor(as.character(newdata$Vital.Status.recode))
+newdata$ER.Status.Recode.Breast.Cancer..1990..<-as.factor(as.character(newdata$ER.Status.Recode.Breast.Cancer..1990..))
+newdata$PR.Status.Recode.Breast.Cancer..1990..<- as.factor(as.character(newdata$PR.Status.Recode.Breast.Cancer..1990..))
+newdata$Behavior.Code.ICD.O.3<- as.factor(as.character(newdata$Behavior.Code.ICD.O.3))
+newdata$Grade<- as.factor(as.character(newdata$Grade))
+newdata$Derived.HER2.Recode..2010..<- as.factor(as.character(newdata$Derived.HER2.Recode..2010..))
+newdata$Breast.Subtype..2010..<- as.factor(as.character(newdata$Breast.Subtype..2010..))
+return(newdata)
+}
+```
+
+The data is the set of cancer cases from various regions and have ID unique to each region called as "Registry ID". Here is the count of the number of patients or cases under different regions. 
+
+```{r reg_id,echo=FALSE }
+table(x$Registry.ID)
+```
+
+To Identify a smaller dataset and find out the important attributes that explain the variation in breast cancer data we applied Multiple Correspondence Analysis (MCA) on the registry ID with most number of records. MCA is an important dimension reduction technique used for categorical dataset. From the above it can be concluded that registry 1520 has largest number of cases and hence we applied MCA to the same.
+
+
+### MCA Analysis
+
+
+MCA as stated above stands for multiple correspondence analysis and can be implemented in R using FactoMineR package. It is used to convert the categorical dataset in to a set of mutually orthogonal dimensions that explain the data variation. On applying the MCA on the subset of data described above we obtain following data plots created using first two dimensions. The first two dimensions explain maximum variation in data.
+```{r mcaChunk, echo=FALSE }
+
+data_1<- RegionData(x,"1520")
+
+#str(data_1)
+par(mfrow=c(2,2))
+res.mca <- MCA(data_1,quanti.sup = 15:18)
+```
+
+The graphs above plot a lot of data points on top of each other and hence make is difficult for analysis. However using the plot of supplementary variables we can say that the supplementary variables like age at diagnosis , survival months, number of malignant and benign tumors are important factors that are not categorical but are close to the circle in the circular plot above.
+```{r mcasum, eval=FALSE }
+summary(res.mca)
+```
+
+Through the summary of this MCA model we concluded that through MCA we were able to reduce the dimensions by large number but since the data is quite big with each attribute having multiple factors we need to look into 133 dimensions for a 90% data variation. This is quite large and hence one need to look out for other techniques to analyze this data set. 
+
+The below plot between first two dimensions identify 10 most important attributes and categories that explan ~4% data variation (Dim1 and Dim2)
+
+```{r mcaplot, echo=FALSE }
+#plot(res.mca, invisible=c("ind","quanti.sup"), cex=0.8)
+plot(res.mca, invisible=c("ind","quanti.sup"), cex=0.8, selectMod = "contrib 10")
+
+```
+
+Form the above curve we identify the following as 10 most important attributes or categories in cancer analysis:
+
+1. PR Status - 9,4
+2. ER Status- 4
+3. Grade -9
+4. HER2 Status - 2
+5. Breast Subtype - 3,5
+6. Breast adjusted AJCC - 0
+7. Behavior  Code - 2
+
+We also tried to plot the cancer cases by Marital status and laterality to identify any pattern
+
+
+
+######"MCA plot by Marital.Status"
+
+```{r mca-1,echo=FALSE}
+
+plot(res.mca, invisible=c("var","quanti.sup"), habillage = "Marital.Status.at.DX")
+
+```
+
+######"MCA plot by Laterality"
+```{r mca-2,echo=FALSE}
+
+plot(res.mca, invisible=c("var","quanti.sup"), habillage = "Laterality")
+
+```
+
+From the plot above the blue and the red group are two distinguish groups 2 - is for married and 4 - is for Divorced. Similarly, on the basis of laterality we have clear difference between bilateral and those with no laterality.
+
+
+
+### Apply clustering
+
+To further analyze this dataset we applied the hierarchical clustering across different registry IDs to obtain dendrograms  that cluster the attributes together. By this we will be able to compare the data distribution across different registries  and find if the different areas have different cluster formations. This clustering can be implemented using a package called "ClustOfVar" in R. here are the various dendrograms obtained for 4 regions with most number of breast cancer cases.
+
+######For 1501:
+
+```{r echo=FALSE}
+newdata<- RegionData(x,"1501")
+variable_tree <- hclustvar(X.quali = newdata[,1:14], X.quanti = newdata[,15:18])
+plot(variable_tree,cex = 0.6)
+
+```
+
+######For 1502
+```{r echo=FALSE }
+
+newdata<- RegionData(x,"1502")
+variable_tree <- hclustvar(X.quali = newdata[,1:14], X.quanti = newdata[,15:18])
+plot(variable_tree,cex = 0.6)
+
+```
+
+
+######For 1520
+```{r echo=FALSE }
+
+newdata<- RegionData(x,"1520")
+variable_tree <- hclustvar(X.quali = newdata[,1:14], X.quanti = newdata[,15:18])
+plot(variable_tree,cex = 0.6)
+#stability(variable_tree, B=5)
+
+```
+
+######For 1525
+```{r echo=FALSE }
+newdata<- RegionData(x,"1525")
+variable_tree <- hclustvar(X.quali = newdata[,1:14], X.quanti = newdata[,15:18])
+plot(variable_tree,cex = 0.6)
+
+```
+
+The various dendrograms  above can be used to cluster different attributes together. This help us in understanding how the different attributes are correlated to each other and if we can use it in dimension reduction or two study one attribute with respect to other. We then used stability curves and found that 6 is the optimum numbee of clusters for these dendrograms as above and hence following 6 Clusters were obtained:
+
+Cluster-1:
+Race and Ethnicity, Number of malignant Tumors
+
+Cluster-2:
+Marital Status, Age, Survival Status
+
+Cluster-3:
+Survival months, breast subtype and HER2 status
+
+Cluster-4:
+Laterality, primary site and sex
+
+Cluster-5:
+Grade,  behavior  and PR status
+
+Cluster-6:
+Histology, ER status and adjusted AJCC 
+
+
+### Cox Proportional Hazard method
+
+
+The clustering and the MCA analysis provide us with important attributes and their co-relations with each other, However to carry out the survival analysis and predict the probability of survival we need to used cox proportional hazard method and Kaplan-Meier estimator method. This method uses two output variables:
+1. The survival flag and 
+2. Survival period after disease detection 
+
+All the other variables are used as input and the outcome is regression equation. We combine survival months and survival status as input to the cox model for regression. This is implemented using Surv() function from the "Survival Package" of R.
+
+```{r echo=FALSE}
+coxdata <- subset(x, Race.Ethnicity!="99" & 
+                              Survival.months<9999 &
+                              Total.Number.of.Benign.Borderline.Tumors.for.Patient!=99 &
+                              Total.Number.of.In.Situ.malignant.Tumors.for.Patient!=99, 
+                              select=c(Sex,Marital.Status.at.DX,
+                              Race.Ethnicity,
+                              Primary.Site,
+                              Laterality,
+                              Histology..92.00..ICD.O.2,
+                              Behavior.Code.ICD.O.3,
+                              Grade,
+                              ER.Status.Recode.Breast.Cancer..1990..,
+                              PR.Status.Recode.Breast.Cancer..1990..,
+                              Breast.Adjusted.AJCC.6th.Stage..1988..,
+                              Breast.Subtype..2010..,
+                              Vital.Status.recode,
+                              Age.at.diagnosis,
+                              Survival.months,
+                              Total.Number.of.Benign.Borderline.Tumors.for.Patient,
+                              Total.Number.of.In.Situ.malignant.Tumors.for.Patient))
+
+
+coxdata<- na.omit(coxdata)
+
+coxdata$status<- coxdata$Vital.Status.recode
+#coxdata$status[coxdata$status!=1]<- 0
+```
+
+
+```{r}
+coxdata$SurvObj <- with(coxdata, Surv(coxdata$Survival.months, status == 1))
+
+```
+
+The cox proportional hazard regression method to identify the important parameters and hazards for the breast cancer patients is implemented using coxph() function as illustrated below:
+
+```{r}
+## Fit Cox regression: age, sex, Karnofsky performance score, wt loss
+res.cox1 <- coxph(SurvObj ~ Sex+
+                  Marital.Status.at.DX+
+                  Race.Ethnicity+
+                  Laterality+
+                  Histology..92.00..ICD.O.2+
+                  Behavior.Code.ICD.O.3+
+                  Grade+
+                  ER.Status.Recode.Breast.Cancer..1990..+
+                  PR.Status.Recode.Breast.Cancer..1990..+
+                  Breast.Adjusted.AJCC.6th.Stage..1988..+
+                  Breast.Subtype..2010..+
+                  Age.at.diagnosis+
+                  Total.Number.of.Benign.Borderline.Tumors.for.Patient+
+                  Total.Number.of.In.Situ.malignant.Tumors.for.Patient, data =  coxdata)
+```
+
+Using the above code with survival object as output and other attributes as input we obtained following results and conclusions:
+
+```{r}
+summary(res.cox1)
+```
+
+We obtain a R2 value of 61% and concordance of 81%. The attributes with lower p values and positive coefficients  are the most hazard causing elements that affect the survival negatively. From the above Cox proportional regression method we can say that race, histology, laterality and marital status are hazards to the survival as they have positive coefficients compared to others. We obtain an equation which consider all the other attributes as inputs. This cox proportional hazard equation can be used to predict the probability of survival for a given cancer case. Let us plot a survival fit curve that gives a plot between probability of survival and the number of months:
+
+```{r echo=FALSE}
+plot(survfit(res.cox1), xlab="No of Months", ylab="Survival probability")
+```
+
+The plot gives a picture with low probability of a cancer patient surviving more than 100 months. This indicates that breast cancer is big hazard and pose a high probability of death.
+
+### Model Evaluation
+
+To further evaluate the performance of this cox proportional model we can test the  proportional hazard assumption using the coz.zph() function. The proportional hazard assumption is supported by a non-significant relationship between residuals and time, and refuted by a significant relationship. The graphs below between the various time and beta value for various variables show that there is no relationship between time and residuals and hence the model is a good fit for the given dataset. 
+
+Note that the P values are low but since we have large dataset the P-values are low which indicate that cox regression may not be a better fit but in a large dataset p-values are often not the correct guide of model performance.
+
+```{r}
+## Check for violation of proportional hazard (constant HR over time)
+(res.zph1 <- cox.zph(res.cox1))
+par(mfrow=c(3,5))
+plot(res.zph1)
+
+```
+
+
+### Results
+
+From the above analysis, we obtained following results:
+
+
+1. Though the MCA we obtained most 10 most important attribute categories that affect the cancer patient's survival. These were the status of HER2, PR and ER cells that affect the health of the patients largely. Further the breast subtype, grade and behavior  code were also identified as important attributes. These are attributes that define the cancer history, type of cancer cell and stage of cancer that affect the survival directly.
+
+2. With further clustering following attribute clusters were identified:
+
+Cluster-1:
+Race and Ethnicity, Number of malignant Tumors
+
+Cluster-2:
+Marital Status, Age, Survival Status
+
+Cluster-3:
+Survival months, breast subtype and HER2 status
+
+Cluster-4:
+Laterality, primary site and sex
+
+Cluster-5:
+Grade,  behavior  and PR status
+
+Cluster-6:
+Histology, ER status and adjusted AJCC 
+
+6 clusters were  identified using the Clustering in R and one use the Cox method to identify which cluster represent the group of attributes that affect the survival of cancer patient.
+
+3. The Cox proportional hazard method further gave us the equation to predict the survival period of the cancer patients and also indicated that the attributes like the race, histology, laterality and marital status have more influence on the survival of a cancer patient  as they have positive coefficients compared to others. The performance curves further strengthen this conclusions as there is no relationship found between the residuals and the time.
+
+4. Thus with the three analyses that we conducted above we can say the following:
+
+i) Breast cancer is a very common disease in women of all age groups and results in death for majority of the cases.
+
+ii) It affects the married women more than the unmarried ones.
+
+iii) The status of the cancer cells HER2, PR and ER affect the survival. The positive the status results in higher hazard.
+
+iv) The survival probability decreases with increase in survival months indicating lower survival time period of cancer patients.
+
+v)  Race, histology or the patient history , laterality and marital status were the major hazards identified by cox regression method.
+
+
+
+### Discussion 
+
+The above analysis have helped us in analyzing the survival of breast cancer patients and identifying the various attributes that affect the survival at large. The cox  proportional  methods has given a fit curve and the MCA along with clustering has provided us with important attribute identification. However one can further identify the limitations  of these methods and work out the better prediction algorithms.
+
+The P-values in the test of violation of proportional hazard show that the cox regression may not be the best fit and hence one need to look out for other survival algorithms.
+
+The MCA has alo proved to be not a very effective method for this large dataset and hence as a future scope to this project one should look out for other dimension reduction techniques which can be implemented on categorical data sets.
+
+
+
+####References
+
+1. Dursun Delen, Analysis of cancer data: a data mining approach, Article in Expert Systems · February 2009
+
+2. Dirk F. Moore, Applied Survival Analysis Using R, ISBN 978-3-319-31245-3
+
+3. David Newitt, Nola Hylton, on behalf of the I-SPY 1 Network and ACRIN 6657 Trial Team. (2016). Multi-center breast DCE-MRI data and segmentations from patients in the I-SPY 1/ACRIN 6657 trials. The Cancer Imaging Archive. http://doi.org/10.7937/K9/TCIA.2016.HdHpgJLK
+
+4. Hylton NM, Gatsonis CA, Rosen MA, et al: Neoadjuvant Chemotherapy for Breast Cancer: Functional Tumor Volume by MR Imaging Predicts Recurrence-free Survival-Results from the ACRIN 6657/CALGB 150007 I-SPY 1 TRIAL. Radiology 279:44-55, 2016
+
+5. Clark K, Vendt B, Smith K, Freymann J, Kirby J, Koppel P, Moore S, Phillips S, Maffitt D, Pringle M, Tarbox L, Prior F. The Cancer Imaging Archive (TCIA): Maintaining and Operating a Public Information Repository, Journal of Digital Imaging, Volume 26, Number 6, December, 2013, pp 1045-1057.
+
+6. Data clustering: algorithms and applications edited by charu c. aggarwal, chandan k. reddy
+7. SEER (SURVEILLANCE, EPIDEMIOLOGY, AND END RESULTS) PROGRAM (2004) Public-Use Data (1973- 2001), National Cancer Institute, DCCPS, Surveillance Research Program, Cancer Statistics Branch, April; based on the November 2003 submission; www.seer.cancer.gov.
+
+8. Data Clustering: Algorithms and Applications (Chapman & Hall/CRC Data Mining and Knowledge Discovery Series) byCharu C. Aggarwal,Chandan K. Reddy
+
+
+9.These websites provide a lot of codes and details for the cox regression, MCA and Clustering:
+
+http://rstudio-pubs-static.s3.amazonaws.com/5896_8f0fed2ccbbd42489276e554a05af87e.html
+
+http://dni-institute.in/blogs/cox-regression-interpret-result-and-predict/
+
+https://www.r-bloggers.com/cox-model-assumptions/
+
+https://seer.cancer.gov/data/
+
+
+ 
+
+
+
